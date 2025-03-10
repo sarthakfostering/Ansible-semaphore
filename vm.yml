@@ -16,9 +16,8 @@
         state: directory
         mode: '0755'
 
-    - name: Copy the QCOW2 image
-      command: >
-        cp {{ base_qcow_image }} {{ new_qcow_image }}
+    - name: Clone the QCOW2 image
+      shell: sudo qemu-img convert -O qcow2 {{ base_qcow_image }} {{ new_qcow_image }}
       args:
         creates: "{{ new_qcow_image }}"
 
@@ -50,4 +49,4 @@
 
     - name: Print status
       debug:
-        msg: "VM {{ vm_name }} created successfully!"
+        msg: "VM {{ vm_name }} created successfully with MAC Address: {{ mac_address.stdout }}"
