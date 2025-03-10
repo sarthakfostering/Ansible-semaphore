@@ -23,7 +23,7 @@
         creates: "{{ new_qcow_image }}"
 
     - name: Generate a random MAC address
-      shell: "echo 52:54:00:$(openssl rand -hex 2 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
+      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
       register: mac_address
 
     - name: Display generated MAC address
