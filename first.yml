@@ -1,0 +1,9 @@
+---
+name: Install necessary softwares
+  hosts: localhost
+  strategy: free
+  become: true
+  tasks:
+    - name: Update the software package dependecy.
+      ansible.builtin.shell:
+        "apt update"
