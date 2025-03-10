@@ -1,34 +1,31 @@
 ---
-- name: Clone QCOW2 Image and Create VM
+name: Create a VM on KVM
   hosts: localhost
   become: yes
-  connection: local
+  vars:
+    vm_name: "{{ lookup('env', 'VM_NAME') | default('test-vm', true) }}"  # Default to 'test-vm' if VM_NAME is not set
+    vm_ram: "{{ lookup('env', 'VM_RAM') | default(2048, true) }}"  # Default to 2048MB if VM_RAM is not set
+    vm_cpu: "{{ lookup('env', 'VM_CPU') | default(2, true) }}"  # Default to 2 CPUs if VM_CPU is not set
   tasks:
+    - name: Ensure VM does not already exist
+      command: virsh list --all
+      register: existing_vms
 
-    - name: Ensure images directory exists
-      file:
-        path: /var/lib/libvirt/images
-        state: directory
-        mode: '0755'
+    - name: Create VM if not exists
+      ansible.builtin.shell: |
+        virt-install \
+          --name {{ vm_name }} \
+          --ram {{ vm_ram }} \
+          --vcpus {{ vm_cpu }} \
+          --disk path=/var/lib/libvirt/images/{{ vm_name }}.qcow2,size=20,format=qcow2 \
+          --cdrom /home/dell/Downloads/ubuntu-20.04.6-desktop-amd64.iso \
+          --os-variant ubuntu20.04 \
+          --network bridge=virbr0,model=virtio \
+          --graphics vnc \
+          --noautoconsole
+      when: "'{{ vm_name }}' not in existing_vms.stdout_lines | map('trim')"
 
-    - name: Clone the QCOW2 image using qemu-img
-      shell: sudo qemu-img convert -O qcow2 /var/lib/libvirt/images/ubuntu24-Main.qcow2 /var/lib/libvirt/images/ubuntu24-Main-copy.qcow2
-      args:
-        creates: /var/lib/libvirt/images/ubuntu24-Main-copy.qcow2
-
-    - name: Generate a random MAC address
-      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
-      register: mac_address
-
-    - name: Display generated MAC address
+    - name: Print status
       debug:
-        msg: "Generated MAC Address: {{ mac_address.stdout }}"
-
-    - name: Install the virtual machine
-      command: >
-        sudo virt-install --name ubuntu24-Main-copy --ram 1024 --vcpus 1
-        --disk path=/var/lib/libvirt/images/ubuntu24-Main-copy.qcow2
-        --import --network bridge=virbr0,mac={{ mac_address.stdout }}
-        --graphics vnc,listen=0.0.0.0 --noautoconsole
-        --os-variant ubuntu22.04
+        msg: "VM {{ vm_name }} created successfully!
 
