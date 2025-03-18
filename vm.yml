@@ -2,12 +2,23 @@
 - name: Clone QCOW2 Image and Create a VM
   hosts: localhost
   become: yes
+  vars_prompt:
+    - name: vm_name
+      prompt: "Enter the VM name"
+      private: no
+      default: "test-vm"
+    - name: vm_ram
+      prompt: "Enter RAM size in MB (e.g., 2048)"
+      private: no
+      default: 2048
+    - name: vm_cpu
+      prompt: "Enter the number of CPUs (e.g., 2)"
+      private: no
+      default: 2
+
   vars:
-    vm_name: "{{ lookup('env', 'VM_NAME') | default('test-vm', true) }}"  # Default VM name
-    vm_ram: "{{ lookup('env', 'VM_RAM') | default(2048, true) }}"  # Default 2GB RAM
-    vm_cpu: "{{ lookup('env', 'VM_CPU') | default(2, true) }}"  # Default 2 CPUs
-    base_qcow_image: "/var/lib/libvirt/images/ubuntu24-Main.qcow2"  # Source QCOW2 image
-    new_qcow_image: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"  # Cloned QCOW2 image
+    base_qcow_image: "/var/lib/libvirt/images/ubuntu24-Main.qcow2"
+    new_qcow_image: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"
 
   tasks:
     - name: Ensure images directory exists
@@ -22,7 +33,7 @@
         creates: "{{ new_qcow_image }}"
 
     - name: Generate a random MAC address
-      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
+      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\(..\)/\1:/g; s/:$//')"
       register: mac_address
 
     - name: Display generated MAC address
