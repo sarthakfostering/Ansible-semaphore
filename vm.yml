@@ -33,22 +33,36 @@
         state: directory
         mode: '0755'
 
+    - name: Check if QCOW2 image already exists
+      stat:
+        path: "{{ new_qcow_image }}"
+      register: qcow_image_status
+
+    - name: Ensure VM does not already exist
+      command: virsh list --all --name
+      register: existing_vms
+
+    - name: Skip VM creation if image or VM already exists
+      debug:
+        msg: "Skipping VM creation because either the image or VM already exists."
+      when: qcow_image_status.stat.exists or vm_name in existing_vms.stdout_lines
+      changed_when: false
+
     - name: Clone the QCOW2 image
       shell: sudo qemu-img convert -O qcow2 {{ base_qcow_image }} {{ new_qcow_image }}
       args:
         creates: "{{ new_qcow_image }}"
+      when: not qcow_image_status.stat.exists
 
     - name: Generate a random MAC address
       shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
       register: mac_address
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Display generated MAC address
       debug:
         msg: "Generated MAC Address: {{ mac_address.stdout }}"
-
-    - name: Ensure VM does not already exist
-      command: virsh list --all
-      register: existing_vms
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Create VM if it does not exist
       shell: |
@@ -62,7 +76,7 @@
         --import \
         --graphics vnc \
         --noautoconsole
-      when: vm_name not in existing_vms.stdout
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Wait for the VM to start
       command: virsh list --state-running
@@ -70,6 +84,7 @@
       retries: 5
       delay: 10
       until: vm_name in vm_running.stdout
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Wait for VM IP via ARP
       shell: "arp -n | grep '{{ mac_address.stdout }}' | awk '{print $1}'"
@@ -77,15 +92,19 @@
       retries: 10
       delay: 10
       until: arp_ip_output.stdout | length > 0
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Set VM IP from ARP (if found)
       set_fact:
         vm_ip: "{{ arp_ip_output.stdout }}"
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Display VM IP address
       debug:
         msg: "The IP address of VM {{ vm_name }} is {{ vm_ip }}"
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
 
     - name: Print final status
       debug:
         msg: "VM {{ vm_name }} created successfully with MAC Address: {{ mac_address.stdout }} and IP Address: {{ vm_ip }}"
+      when: not qcow_image_status.stat.exists and vm_name not in existing_vms.stdout_lines
