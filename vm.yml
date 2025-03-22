@@ -24,7 +24,6 @@
       private: no
 
   vars:
-    # Define new_qcow_image using the user-defined vm_name
     new_qcow_image: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"
 
   tasks:
@@ -35,12 +34,12 @@
         mode: '0755'
 
     - name: Clone the QCOW2 image
-      shell: sudo qemu-img convert -O qcow2 {{ base_qcow_image }} {{ new_qcow_image }}
+      command: qemu-img convert -O qcow2 {{ base_qcow_image }} {{ new_qcow_image }}
       args:
         creates: "{{ new_qcow_image }}"
 
     - name: Generate a random MAC address
-      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
+      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\(..\)/\1:/g; s/:$//')"
       register: mac_address
 
     - name: Display generated MAC address
@@ -48,7 +47,7 @@
         msg: "Generated MAC Address: {{ mac_address.stdout }}"
 
     - name: Ensure VM does not already exist
-      command: virsh list --all
+      shell: virsh list --all --name
       register: existing_vms
 
     - name: Create VM if it does not exist
@@ -63,8 +62,23 @@
         --import \
         --graphics vnc \
         --noautoconsole
-      when: vm_name not in existing_vms.stdout
+      when: vm_name not in existing_vms.stdout_lines
 
-    - name: Print status
+    - name: Wait for the VM to start and get an IP address
+      shell: virsh domifaddr {{ vm_name }}
+      register: vm_ip_output
+      retries: 5
+      delay: 10
+      until: vm_ip_output.stdout | regex_search('ipv4.*?([0-9]+(?:\.[0-9]+){3})')
+
+    - name: Extract the IP address of the VM
+      set_fact:
+        vm_ip: "{{ vm_ip_output.stdout | regex_search('ipv4.*?([0-9]+(?:\.[0-9]+){3})', '\1') }}"
+
+    - name: Display VM IP address
       debug:
-        msg: "VM {{ vm_name }} created successfully with MAC Address: {{ mac_address.stdout }}"
+        msg: "The IP address of VM {{ vm_name }} is {{ vm_ip }}"
+
+    - name: Print final status
+      debug:
+        msg: "VM {{ vm_name }} created successfully with MAC Address: {{ mac_address.stdout }} and IP Address: {{ vm_ip }}"
