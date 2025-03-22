@@ -25,6 +25,7 @@
 
   vars:
     new_qcow_image: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"
+    network_bridge: "virbr0"
 
   tasks:
     - name: Ensure images directory exists
@@ -39,7 +40,7 @@
         creates: "{{ new_qcow_image }}"
 
     - name: Generate a random MAC address
-      shell: 'echo 52:54:00:$(openssl rand -hex 3 | sed "s/\(..\)/\1:/g; s/:$//")'
+      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\(..\)/\1:/g; s/:$//')"
       register: mac_address
 
     - name: Display generated MAC address
@@ -47,7 +48,7 @@
         msg: "Generated MAC Address: {{ mac_address.stdout }}"
 
     - name: Ensure VM does not already exist
-      shell: virsh list --all --name
+      command: virsh list --all
       register: existing_vms
 
     - name: Create VM if it does not exist
@@ -58,22 +59,22 @@
         --vcpus {{ vm_cpu }} \
         --disk path={{ new_qcow_image }},format=qcow2 \
         --os-variant ubuntu20.04 \
-        --network bridge=virbr0,mac={{ mac_address.stdout }},model=virtio \
+        --network bridge={{ network_bridge }},mac={{ mac_address.stdout }},model=virtio \
         --import \
         --graphics vnc \
         --noautoconsole
-      when: vm_name not in existing_vms.stdout_lines
+      when: vm_name not in existing_vms.stdout
 
     - name: Wait for the VM to start and get an IP address
-      shell: virsh domifaddr {{ vm_name }}
+      command: virsh domifaddr {{ vm_name }}
       register: vm_ip_output
-      retries: 5
+      retries: 10
       delay: 10
-      until: vm_ip_output.stdout | regex_search('ipv4.*?([0-9]+(?:\.[0-9]+){3})')
+      until: "'ipv4' in vm_ip_output.stdout"
 
     - name: Extract the IP address of the VM
       set_fact:
-        vm_ip: "{{ vm_ip_output.stdout | regex_search('ipv4.*?([0-9]+(?:\.[0-9]+){3})', '\1') }}"
+        vm_ip: "{{ vm_ip_output.stdout | regex_search('ipv4.*?([0-9]+(?:\\.[0-9]+){3})', '\\1') }}"
 
     - name: Display VM IP address
       debug:
