@@ -25,7 +25,7 @@
 
   vars:
     new_qcow_image: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"
-    vm_username: "admin"
+    vm_username: "admin1"
     vm_password: "admin@123"
 
   tasks:
