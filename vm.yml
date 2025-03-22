@@ -25,7 +25,6 @@
 
   vars:
     new_qcow_image: "/var/lib/libvirt/images/{{ vm_name }}.qcow2"
-    network_bridge: "virbr0"
 
   tasks:
     - name: Ensure images directory exists
@@ -35,12 +34,12 @@
         mode: '0755'
 
     - name: Clone the QCOW2 image
-      command: qemu-img convert -O qcow2 {{ base_qcow_image }} {{ new_qcow_image }}
+      shell: sudo qemu-img convert -O qcow2 {{ base_qcow_image }} {{ new_qcow_image }}
       args:
         creates: "{{ new_qcow_image }}"
 
     - name: Generate a random MAC address
-      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\(..\)/\1:/g; s/:$//')"
+      shell: "echo 52:54:00:$(openssl rand -hex 3 | sed 's/\\(..\\)/\\1:/g; s/:$//')"
       register: mac_address
 
     - name: Display generated MAC address
@@ -59,22 +58,29 @@
         --vcpus {{ vm_cpu }} \
         --disk path={{ new_qcow_image }},format=qcow2 \
         --os-variant ubuntu20.04 \
-        --network bridge={{ network_bridge }},mac={{ mac_address.stdout }},model=virtio \
+        --network bridge=virbr0,mac={{ mac_address.stdout }},model=virtio \
         --import \
         --graphics vnc \
         --noautoconsole
       when: vm_name not in existing_vms.stdout
 
-    - name: Wait for the VM to start and get an IP address
-      command: virsh domifaddr {{ vm_name }}
-      register: vm_ip_output
+    - name: Wait for the VM to start
+      command: virsh list --state-running
+      register: vm_running
+      retries: 5
+      delay: 10
+      until: vm_name in vm_running.stdout
+
+    - name: Wait for VM IP via ARP
+      shell: "arp -n | grep '{{ mac_address.stdout }}' | awk '{print $1}'"
+      register: arp_ip_output
       retries: 10
       delay: 10
-      until: "'ipv4' in vm_ip_output.stdout"
+      until: arp_ip_output.stdout | length > 0
 
-    - name: Extract the IP address of the VM
+    - name: Set VM IP from ARP (if found)
       set_fact:
-        vm_ip: "{{ vm_ip_output.stdout | regex_search('ipv4.*?([0-9]+(?:\\.[0-9]+){3})', '\\1') }}"
+        vm_ip: "{{ arp_ip_output.stdout }}"
 
     - name: Display VM IP address
       debug:
